@@ -1,0 +1,657 @@
+---
+title: "Free Code Camp Survey Analysis"
+author: "Finbar Maunsell"
+date: "13 March 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+This project is intended for the the udacity 'Data Analysis with R' course.
+
+The "2016 New Coder Survey" dataset is made up of 113 variables. Most of these variables are answers to survey questions, although a few are computer-generated (e.g. respondent ID and survey start/end times). More than 15,000 observations exist.
+
+The str function output is long so I won't print it here. Please consult Free Code Camp's survey data dictionary(https://github.com/FreeCodeCamp/2016-new-coder-survey/blob/master/survey-data-dictionary.md). Boolean, numeric, and categorical types are the majority.
+
+Free Code Camp is an open source community that helps you learn to code. They offer self-paced coding challenges, non-profit projects, certificates. They also connect you with people in your city so you can code together. The "2016 New Coder Survey" was an anonymous survey, done in 2016, of thousands of people who started coding less than 5 years ago.
+
+In this project I intend to look into the data provided by Free Code Camp's, "2016 New Coder Survey". My main aim is to find statistics that apply to me and in turn learn from my analysis of this data set. Being an ex-student doing a full time Online Degree in data analysis I'm especially interested in those students in this data set that have been to university, are studying at least 40hours per week and are going down a data analysis/science pathway. I'd also like to explore the comparison between those students looking to do data analysis and those looking to do Front end dev. This spurs from my disinterest in Front end dev and therefore interest in any similarities/differences between their stats and data science stats.
+
+
+Admin:
+```{r}
+#Welcome to our extensive library...
+library(scales)
+library(ggplot2)
+library(countrycode)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(stringr)
+library(psych)
+
+
+get_data_local = function(){
+  #function used on finn's desktop to retrieve the csv file(already edited using datasetcreation function.) Otherwise non edited file is found at
+  #https://www.kaggle.com/freecodecamp/2016-new-coder-survey-
+  setwd("/Users/O'l Mate/Documents/R/DataFiles/CodeCampProject")
+  data_set <- read.csv(file='CodeCampUdacitySet.csv')
+  return(data_set)
+}
+
+data_set = get_data_local()
+
+#Change countries to continents and converting data points into real booleans:
+#(warning this script takes a fair while to finish - 2mins with 8gb ram)
+#insert the dataset from kaggle into here and you'll be away!
+
+datasetCreation = function(data_set){
+  getwd()
+  setwd("/Users/O'l Mate/Documents/R/Udacity project")
+  data_set <- read.csv('2016-FCC-New-Coders-Survey-Data.csv')
+  data_set <- as.data.frame(with(data_set, data_set[!is.na(data_set), ]))
+  data_set$ContinentCitizen <- countrycode(data_set$CountryCitizen,
+                                      'country.name', 'continent')
+  
+  data_set$ContinentLive <- countrycode(data_set$CountryLive, 'country.name', 'continent')
+  
+  data_set <- select(data_set, Age:CountryCitizen, ContinentCitizen, CountryLive,
+                ContinentLive, EmploymentField:StudentDebtOwe)
+  
+  # Clean countries' data ---------------------------
+  
+  # 66 countries with no assigned continent via countrycode()
+  country_cont_groups <- select(data_set, CountryCitizen:ContinentLive)
+  
+  problem_countries <- with(country_cont_groups,
+                            country_cont_groups[(!is.na(CountryCitizen) &
+                                           is.na(ContinentCitizen)) |
+                                          (!is.na(CountryLive) &
+                                           is.na(ContinentLive)), ])
+  
+  
+  # Problem country/continent names
+  fix_cont <- c('Asia', 'Americas', 'Europe', 'Europe', 'Europe', 'Oceania', 'Africa')
+  names(fix_cont) <- c('Korea North', 'Virgin Islands (USA)', 'Canary Islands', 'Channel Islands', 'Kosovo', 'Hawaii', 'Nambia')
+  
+  
+  
+  # Assign continents to problem countries
+  data_set$ContinentCitizen <- ifelse(data_set$CountryCitizen %in% names(fix_cont),
+                                 fix_cont[as.character(data_set$CountryCitizen)],
+                                 data_set$ContinentCitizen)
+  data_set$ContinentLive <- ifelse(data_set$CountryLive %in% names(fix_cont),
+                              fix_cont[as.character(data_set$CountryLive)],
+                              data_set$ContinentLive)
+  
+  # South American countries in dataset
+  south_america <- c('Argentina', 'Bolivia', 'Brazil', 'Chile', 'Colombia',
+                 'Ecuador', 'Guyana', 'Netherland Antilles', 'Paraguay', 'Peru',
+                 'Uruguay', 'Venezuela')
+  
+  # Separate Americas into North and South
+  make_s_america <- function(continent, country) {
+    return(ifelse(continent == 'Americas' & country %in% south_america,
+                  'South America',
+                  continent))
+  }
+  
+  make_n_america <- function(continent, country) {
+    return(ifelse(continent == 'Americas' & !(country %in% south_america),
+                  'North America',
+                  continent))
+  }
+  
+  data_set$ContinentCitizen <- make_s_america(data_set$ContinentCitizen, data_set$CountryCitizen)
+  data_set$ContinentCitizen <- make_n_america(data_set$ContinentCitizen, data_set$CountryCitizen)
+  data_set$ContinentLive <- make_s_america(data_set$ContinentLive, data_set$CountryLive)
+  data_set$ContinentLive <- make_n_america(data_set$ContinentLive, data_set$CountryLive)
+  
+  # TEST CONTINENT VARS
+  #table(data_set$ContinentLive)
+  # table(data_set$ContinentCitizen)
+  
+  # Make continents factor variables
+  data_set$ContinentCitizen <- factor(data_set$ContinentCitizen)
+  data_set$ContinentLive <- factor(data_set$ContinentLive)
+  
+  
+  #Converting data points into real booleans:
+  
+  
+  #changing hashighSpeedInt to bool value for clearness.
+  HasHighSpdInternetBool=ifelse(data_set$HasHighSpdInternet=='1', TRUE, FALSE)
+  data_set$HasHighSpdInternetBool = HasHighSpdInternetBool
+  
+  #changing moneyforlearning to bool value for clearness. 
+  MoneyForLearningBool=ifelse(data_set$MoneyForLearning>0, TRUE, FALSE)
+  data_set$MoneyForLearningBool = MoneyForLearningBool
+  
+  
+  #convert code event other to bool values:
+  data_set$CodeEventOtherBool = ifelse(!is.na(data_set$CodeEventOther), as.integer(1), NA)
+  
+  #create code_event_bool variable, True if the student went to any events, false otherwise:
+  d$n = apply(select(d, cbind(x:b)), 1, function(x)ifelse(length(x[!is.na(x)])>0, TRUE, FALSE))
+  
+  data_set$CodeEventBool = apply(select(data_set, cbind(CodeEventBootcamp:CodeEventNodeSchool, CodeEventOtherBool, CodeEventRailsBridge:CodeEventWorkshop)), 1, function(x)ifelse(length(x[!is.na(x)])>0, TRUE, FALSE))
+  
+  #create dataframe with all code events to sumamrise
+  #code_event_all_cols = select(data_set, cbind(CodeEventBootcamp:CodeEventNone, CodeEventOtherBool, CodeEventRailsBridge:CodeEventWorkshop))
+  #find numbers for each event:
+  #code_event_sum <-
+    #code_event_all_cols %>%
+    #summarise_each(funs(sum(., na.rm = TRUE)))
+  return(data_set)
+}
+
+
+
+
+```
+
+
+Ggplot graph functions:
+```{r}
+#These serve as a reminder that functions may not always be the best way of avoiding repetition
+
+pretty_histogram <- function(column, binwidth, xlab, tlab) {
+  df <- as.data.frame(column)
+  colnames(df)[1] <- "xlabel"
+  
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel), ]))
+  colnames(df_na_rm)[1] <- "xlabel"
+  
+  plot <- ggplot(aes(xlabel), data = df_na_rm) +
+    geom_histogram(binwidth = binwidth, color = '#D35F61', fill = '#D35F61') +
+    theme_minimal() +
+    labs(title = tlab, x = xlab, y = "Count\n") +
+    theme(text = element_text(color="#454545"),
+          axis.text = element_text(size = 10))
+  return(plot)}
+
+pretty_proportion_histogram <-function(column, binwidth, xlab, tlab, ylimo=NULL, xlimo=NULL){
+  df <- as.data.frame(column)
+  colnames(df)[1] <- "xlabel"
+  
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel), ]))
+  colnames(df_na_rm)[1] <- "xlabel"
+  
+  plot <- ggplot(aes(xlabel), data = df_na_rm) +
+    geom_histogram(aes(y=..count../sum(..count..)), binwidth = binwidth, color = '#D35F61', fill = '#D35F61') +
+    coord_cartesian(xlim= xlimo, ylim = ylimo ) +
+    scale_y_continuous(labels=percent_format()) +
+    theme_minimal() +
+    labs(title = tlab, x = xlab, y = "Count/sum(Count)\n") +
+    theme(text = element_text(color="#454545"),
+          axis.text = element_text(size = 10))
+  return(plot)}
+
+                     
+flip_plot_x <- function(xcolumn, ylab, tlab){
+  df <- as.data.frame(xcolumn)
+  colnames(df)[1] <- 'xlabel'
+  
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel), ]))
+  colnames(df_na_rm)[1] <- "xlabel"
+  
+  plot <- ggplot(aes(xlabel), data = df_na_rm) +
+    geom_bar(color = '#D35F61', fill = '#D35F61') +
+    theme_minimal() +
+    labs(title = tlab) +
+    coord_flip() +
+    theme(text = element_text(color="#454545"),
+          axis.text = element_text(size = 10))
+  return(plot)}
+
+flip_plot_y <- function(xcolumn, ylab, xlab, tlab, ycolumn){
+  df <- as.data.frame(cbind(xcolumn, ycolumn))
+  colnames(df)[1] <- 'xlabel'
+  colnames(df)[2] <-'ylabel'
+  
+  df_na_rm = NULL
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel), ]))
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel)&!is.na(ylabel), ]))
+  
+  colnames(df_na_rm)[1] <- "xlabel"
+  colnames(df_na_rm)[2] <- "ylabel"
+  
+  plot -> ggplot(aes(x = xlabel, y = ylabel), data = df_na_rm) +
+    geom_bar(stat='identity', color = '#D35F61', fill = '#D35F61') +
+    theme_minimal() +
+    labs(title = tlab, y=ylab, x=xlab) +
+    coord_flip() +
+    theme(text = element_text(color="#454545"),
+          axis.text = element_text(size = 10))
+  return(plot)}
+
+
+flip_plot_proportions <- function(xcolumn, xlab, tlab){
+  df <-as.data.frame(xcolumn)
+  colnames(df)[1] <- 'xlabel'
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel), ]))
+  colnames(df_na_rm)[1] <- "xlabel"
+  
+  plot <- ggplot(aes(xlabel), data = df_na_rm) +
+    geom_bar(aes(y=..count../sum(..count..)), color = '#D35F61', fill = '#D35F61') +
+    theme_minimal() +
+    labs(title = tlab, y='', x = xlab) +
+    scale_y_continuous(labels=percent_format()) +
+    coord_flip() +
+    theme(text = element_text(color="#454545"),
+          axis.text = element_text(size = 10))
+  return(plot)}
+
+flip_plot_proportions_y <- function(xcolumn, ycolumn){
+  df <- as.data.frame(cbind(xcolumn, ycolumn))
+  colnames(df)[1] <- 'xlabel'
+  colnames(df)[2] <-'ylabel'
+  
+  df_na_rm = NULL
+  
+  df_na_rm <- as.data.frame(with(df, df[!is.na(xlabel)&!is.na(ylabel), ]))
+  
+  colnames(df_na_rm)[1] <- "xlabel"
+  colnames(df_na_rm)[2] <- "ylabel"
+  
+  plot <- ggplot(aes(x = xlabel, fill = ylabel), data = df_na_rm) +
+    geom_bar(position = 'fill')
+  return(plot)}
+
+```
+
+
+First of all let's analyse a summary of the data:
+```{r}
+summary(data_set)
+```
+
+We can already see a lot of interesting things from that summary. There were a lot of NA values for a lot of variables. In this case I'm going to ignore the NA values accepting the fact that they could belong to a specific group of the respondants, swaying the data in some way. From now on we forget about these values in the spirit of getting immersed in the data without distraction.
+
+From the summary we've noticed that a few of the surveys questions have resulted in multiple columns being created. Ie. the code event variables. The problem with these is that some of the podcasts provided under 'other' have more numbers than the podcasts provided in the question. When we get to the podcasts we will need to change them into variables.(likewise for other questions of that sort).
+
+The countries that respondants are from are too spread out to produce any meaningful data. To help make observations based on respondant location I'm going to condense the CountryCitizen and CountryLive variables into their respective continents using the 'CountryCode' package. In doing so there were countries which didn't get assigned to a continent so I've done them manually. 
+
+Since I'm interested in the front-end and data analysis groups, lets see what their distributions were like in the data set:
+```{r}
+flip_plot_x(data_set$JobRoleInterest, 'count', 'Job interests')
+```
+
+
+Splitting the data groups into Front end and Data analysis sample groups.
+```{r}
+
+front_end <- with(data_set, data_set[JobRoleInterest == '  Front-End Web Developer' &
+                !is.na(JobRoleInterest), ])
+data_analy <-
+  with(data_set, data_set[JobRoleInterest == '  Data Scientist / Data Engineer' &
+                !is.na(JobRoleInterest), ])
+front_end_data_analy <- rbind(front_end, data_analy)
+
+```
+JobRoleInterest
+
+
+Age of repondants:
+(need to convert count to proportions because of the uneven counts between the two groups.)
+```{r}
+data_ages = pretty_proportion_histogram(data_analy$Age, 2, 'Age', 'Data analysis ages')
+front_end_ages = pretty_proportion_histogram(front_end$Age, 2, 'Age', 'Front end ages')
+
+grid.arrange(data_ages, front_end_ages)
+
+```
+From the histograms we can see a very clear normal distribution of ages in both graphs. (a log scale would be overkill here) It appears that those interested in Front end are going to be older on average than those interested in Data Science. We can further explore these assumptions using descriptive stats:
+Data Science:
+```{r}
+summary(data_analy$Age, na.rm=TRUE)
+
+```
+Front end:
+```{r}
+summary(front_end$Age, na.rm=TRUE)
+```
+
+This confirms my assumptions that those interested in front end are older by about 1 year if we go off the median and mean values. 
+
+This interests me because I expected the respondants doing data science to be older. This was because of the required code base to start doing data science versus front-end. I'd now like to look at the statistics on prior coding experience in both groups. I expect those who are interested in data science to have more experience:
+
+```{r}
+
+ggplot(data=front_end_data_analy, aes(y=MonthsProgramming, x=JobRoleInterest)) + geom_boxplot() + coord_cartesian(ylim=c(0, 100))
+
+```
+
+In the box plots above I've zoomed into the values between 0 and 100 on the y axis. This is becuase of the high numebr of outliers in both data sets. 
+From above we can see that the IQR for those respondants looking to do data science was larger than that for those looking to do front end. Since the lower quartile for both sets was about the same, I'm begining to think data scientists came into the code camp having done more programming in advance.
+
+I wonder what the plots would look like on a log scale:
+```{r}
+
+ggplot(data=front_end_data_analy, aes(y=MonthsProgramming, x=JobRoleInterest)) + geom_boxplot() + coord_cartesian(ylim=c(0.01, max(front_end_data_analy$MonthsProgramming, na.rm=TRUE))) + scale_y_log10() + labs(y='MonthsProgramming(log10)')
+```
+This graph doesn't show anything new compared to the one without a log scale.
+
+```{r}
+summary(data_analy$MonthsProgramming, na.rm=TRUE)
+```
+```{r}
+summary(front_end$MonthsProgramming, na.rm=TRUE)
+```
+
+The data summary is actually really revealing. Students looking to do data science had a mean programming time of 16.17 vs 9.5 for front end. However, the better statistic to look at is the median since it isn't thrown off by outliers. When we consider the median values, the median for the data science group actually only had 1 month more programming experience than the person who was the median for the front end group. The 3rd quartiles tell a different story. There was a big difference of 8 between data science hopefuls at 20 and front end at 12 months. This is the cause of the large difference in IQR's between the two groups. It is a revealing value. It suggests that perhaps a respondant with more months of programming experience beyond a year were more likely to do data science. This is believeable due to the usefulness of having a larger code base in data science versus front end. To really be able to say whether or not the difference in months between the two groups was significant we need to compare their values to the rest of the dataset. 
+
+```{r}
+ggplot(data=subset(data_set, !is.na(JobRoleInterest)), aes(y=MonthsProgramming, x=JobRoleInterest)) + geom_boxplot() + coord_flip(ylim=c(0, 100))
+```
+We can see a clear distinction between the 'back-end' and 'front-end' style groups. The data scientists, a part of the 'back-end' group, had around the highest upper quatile, maximum(excluding outliers) and mean. On the other hand front-end web developers were the group with the lowest upper quartile and maximum values.
+
+Following my exploration into the months spent programming and also age, I'd like to look into the relationship between months spent programming and age to see if they are in fact related like I thought when I first started looking at age.
+
+Relationships stuff to be inserted here:
+
+
+```{r}
+ggplot(aes(x=Age, y=MonthsProgramming), data=data_set) + geom_jitter(alpha=1/5) + geom_smooth() 
+
+
+
+```
+From this graph we can see two relationships. There is the one caused by the majority of students who have done fewer than 25 months of programming. But then there is also a faint positive relationship shown. To better explore this realtionship I'm going to remove the bottom 90% of values for months programming. (I got this idea from looking at the box plot on months programming). Since the CodeCamp course is deisgned for new programmers, I wonder if the respondants above the third quartile for months programming are majorly those who just wnat to take part in charity projects(or learn a new field)?
+```{r}
+golden_oldies <- data_set[data_set$MonthsProgramming >= quantile(data_set$MonthsProgramming, 0.9, na.rm = TRUE),]
+
+
+ggplot(aes(x=Age, y=MonthsProgramming), data=golden_oldies) + geom_jitter(alpha=1/5) + geom_smooth() + geom_hline(yintercept =75)             
+```
+
+In this graph we can see that there is a positive relationship between age and months programming. However it has to be noted that this is only found by removing the respondants below the 90th percentile. In effect what we have here is a graph showing that there is a postive relationship between months programming and age (for those who've been programming for about more than 75 months - see the reference line). I believe what we are seeing here is the effect of organisations like CodeCamp and Udacity who have heavily lowered the barriers to entry for people of all ages to get into programming and therefore dev jobs. 75 months before this survey was conducted the graph ,I believe, would have been completely positive but the influx of new programmers has caused the high density of values below 75 months of programming (at all ages below retirement) and the positive relationship above that. 
+
+From below we can see that neither of the groups had anyone who had worked as a software dev beforehand.
+
+```{r}
+summary(data_analy$IsSoftwareDev)
+
+```
+
+```{r}
+summary(front_end$IsSoftwareDev)
+```
+
+Lets look at gender distribtuions in the two data sets:
+
+```{r}
+table(data_analy$Gender)/sum(table(data_analy$Gender))
+
+```
+```{r}
+
+table(front_end$Gender)/sum(table(front_end$Gender))
+
+```
+Here we can see that there was a higher proportion of females in front_end compared to back_end. 
+
+I'd like to do some research into the amount of hours spent learning each week for the two weeks. 
+```{r}
+x = pretty_proportion_histogram(data_analy$HoursLearning, 5, 'hours spent', 'Hours spent learning per week for those looking to do data science', c(0, 0.30), c(0,100)) 
+y = pretty_proportion_histogram(front_end$HoursLearning, 5, 'hours spent', 'Hours spent learning per week for those looking to do front end', c(0, 0.30), c(0,100))
+grid.arrange(x, y)
+
+```
+These graphs seem to be thrown off by extreme values. I feel obliged to cut out all values above 70, or even 60 for I don't think it's realistic to be doing that many hours of learning per week (70 hours a week is 10 hours a day!). However I can't assume these values aren't real because of my lack of motivation. IF we assumed that the values above 60 were real then a log10 transformation of the graph would be useful to generate a more normal looking distribution:
+
+```{r}
+
+x = ggplot(aes(front_end$HoursLearning), data = front_end) + 
+  geom_histogram(aes(y=..count../sum(..count..)), binwidth = 0.1, color = '#D35F61', fill = '#D35F61') +
+  scale_x_log10(breaks = c(0, 2.5, 5, 10, 20, 40, 80), labels = c(0, 2.5, 5, 10, 20, 40, 80)) + 
+  scale_y_continuous(labels=percent_format()) +
+  theme_minimal()+
+  ylim(c(0,0.3))+
+  labs(title = 'front end, hours spent learning', x = 'Hours learning per week (log10)')
+
+y = ggplot(aes(data_analy$HoursLearning), data = data_analy) + 
+  geom_histogram(aes(y=..count../sum(..count..)), binwidth=0.1,color = '#D35F61', fill = '#D35F61') +
+  scale_x_log10(breaks = c(0, 2.5, 5, 10, 20, 40, 80), labels = c(0, 2.5, 5, 10, 20, 40, 80)) + 
+  scale_y_continuous(labels=percent_format()) +
+  theme_minimal()+
+  ylim(c(0, 0.3))+
+  labs(title = 'data science, hours spent learning', x = 'Hours learning per week (log10)')
+
+grid.arrange(x, y)
+```
+
+It seems that the amount of hours spent learning per week was similar between the two groups which is understandable given that on the CodeCamp website it says that both the data science and front-end courses are expected to take 400 hours. Something that really interests me now is how long it actually took students to finsh their courses and whether they really took 400 hours? (Unfortuanetly no actual data on this).
+
+```{r}
+x = flip_plot_proportions(data_analy$ContinentLive, 'Continents', 'Distribution of continents that Data science students live on')
+y = flip_plot_proportions(front_end$ContinentLive, 'Continents', 'Distribution of continents that Front end students live in')
+grid.arrange(x, y)
+
+```
+From these plots we can see that the majority of students interested in both subjects live in North America. One thing to note is the higher amount of  students from Asia that are interested in data science. Hopefully we can see this better using a table:
+
+```{r}
+
+table(data_analy$ContinentLive)/sum(table(data_analy$ContinentLive))
+
+```
+
+```{r}
+table(front_end$ContinentLive)/sum(table(front_end$ContinentLive))
+```
+The table shows that in fact almost twice as many people doing the course in Asia were aiming to get into Data science versus front end. 
+
+Graphs on the countries that the respondants were citizens of(split into continents because of the high number of countries.)
+
+```{r}
+x = flip_plot_proportions(data_analy$ContinentCitizen, 'Continents', 'Distribution of continents that Data science students are citizens in')
+y = flip_plot_proportions(front_end$ContinentLive, 'Continents', 'Distribution of continents that Front end students are citizens in')
+grid.arrange(x, y)
+```
+The result was very similar to the 'lived in' set. This is to be expected.
+
+As a result of globalisation it could be argued that the country someone is from is becoming less and less of an influence in what online courses that person takes. Instead, the type of area within their country that they're in should be the main influence. Ie, I'd guess that if you were from a rural area you'd be less likely to pursue any CodeCamp courses compared to someone living in a city with more than 5million people.
+Lets have a look!
+
+```{r}
+
+x = flip_plot_proportions(data_analy$CityPopulation, 'CityPopulation', 'Distribution of City Populations for those looking to do data science')
+y = flip_plot_proportions(front_end$CityPopulation, 'CityPopulation', 'Distribution of City Populations for those looking to do front end')
+grid.arrange(x, y)
+
+```
+There is a slight increase (about 5%) in students who are looking to do data science in the >1million group. This loss of %5 is seen on the front end group in the <100,000 group. Such small numbers should not be used to assume anything.
+
+Table showing proportion of students in all interest groups who had high speed internet. 
+```{r}
+table(data_set$HasHighSpdInternetBool, data_set$JobRoleInterest)
+prop.table(table(data_set$HasHighSpdInternetBool, data_set$JobRoleInterest), margin=2)
+
+```
+
+Shown above are the proportions of each job role interest who have High speed internet. Front end developer's are in fact the group with the highest proportion of students who have high speed internet while data scientists were the group with the lowest proportion of students who have high speed internet.
+
+
+Code events:
+
+I want to find out if going to a code event had a positive impact on any performnce or success measures of the students. Performance or success measures I classify as one of the two, ExpectedEarning or Hours Learning. We'll compare the difference using a boxplot.
+
+```{r}
+
+ggplot(aes(x=CodeEventBool, y=HoursLearning), data=data_set) + geom_boxplot()
+```
+
+
+
+
+
+```{r}
+ggplot(aes(x=CodeEventBool, y=ExpectedEarning), data=data_set) + geom_boxplot()
+
+```
+
+
+
+
+From this we can see that actually going to a code event raised the expected earning values for students.
+We'll use a t-test to test whether the difference in means was significant:
+
+
+
+```{r}
+
+t.test(ExpectedEarning~CodeEventBool, data=data_set)
+```
+
+
+The p-value is far below the value 0.05 for the Confidence interval. Therefore there is a significant difference between the means for the two categories. This implies that going to a coding event is likely to influence a higher expected earning!
+
+I want to have a look at Money for learning: 
+```{r}
+table(data_set$MoneyForLearningBool, data_set$JobRoleInterest)
+prop.table(table(data_set$MoneyForLearningBool, data_set$JobRoleInterest), margin=2)
+```
+
+Now these seem to be quite high numbers of students who received money for learning. However, I feel this is a stat that is especially affected by the high numbers of NA values. My reasoning is that if a student was receiving money for learning then that student would feel obliged to answer the question, and unlikely to answer if not. Lets see how including the effect of the NA values would affect the data:
+
+```{r}
+MoneyForLearningBoolNA=ifelse(data_set$MoneyForLearning>0 & !is.na(data_set$MoneyForLearning), TRUE, ifelse(is.na(data_set$MoneyForLearning),'NA', FALSE))
+data_set$MoneyForLearningBoolNA = MoneyForLearningBoolNA
+
+table(data_set$MoneyForLearningBoolNA)
+
+```
+Here we see the massive amount of NA values which are diluting the data. However what respondants answered the question about job role interest but not the money for learning question:
+```{r}
+table(data_set$MoneyForLearningBoolNA, data_set$JobRoleInterest)
+prop.table(table(data_set$MoneyForLearningBoolNA, data_set$JobRoleInterest), margin=2)
+```
+In fact it seems that the majority of respondants didnt answer the question about job role interest and money for learning. As a result we can't assume that a student who was receiving money for learning would have been obliged to answer the question. This means that the data set implies that more students than not received money for learning. This is a very interesting statistic 
+
+I'd like to see if there are any correlations between variables that I haven't thought about yet. To use the 'pairs.panels()' function I'm going to need to cut out some variables from the data frame. Here are the ones I've chosen. I've chosen these because of my specific interest in them, namely as performance measures or what is most relateable for me. 
+
+Numerical:
+
+Age
+Programming experience
+Hours dedicated to learning weekly
+Current salary
+Student Debt Owe
+Expected next salary
+
+Categorical:
+
+Gender
+Continent the person lives in
+Job role of interest
+is under employed
+
+```{r}
+cut_set = data.frame(select(data_set, cbind(Age, HoursLearning, Income, ExpectedEarning, StudentDebtOwe, MonthsProgramming, Gender, ContinentLive, JobRoleInterest, IsUnderEmployed)))
+pairs.panels(cut_set)
+?pairs.panels()
+```
+
+From above we can see that in fact no two variables have a correlation above 0.38 (Expected earning and income). Let's have a look at that:
+```{r}
+ggplot(data_set, aes(y=ExpectedEarning, x=Income)) + geom_jitter(alpha=1/5, aes(color=Age)) + geom_smooth(method='lm')
+```
+We can see that there is indeed a positive relationship between expected earning and income. I can imagine this is caused by those who are looking to learn to code to help get a better position/salary in their area of work. 
+
+Since the 'pairs.panels' plot didn't reveal any major correlations I'm going to explore the variables which especially apply to me and create multivariate graphs from that.
+
+Since I'm a 20 year old male from New Zealand + I have a student loan but have left uni, I'd like to explore the statistics around that subset of the data. Ie. 19-25 yr old males and their performance measures.
+
+Create subset:
+```{r}
+
+male_25 = subset(data_set, Age<26 & Age>18 & Gender=='male')
+
+MALE_25_NOUNI_andloan = subset(data_set, is.na(SchoolMajor) & HasStudentDebt=='1')
+table(MALE_25_NOUNI_andloan$ContinentLive)
+
+```
+
+It seems that the distribution of continents for the students in my subset is similar to the distribution of continents for the overall data set. How about expected earnings?
+
+```{r}
+
+y= ggplot(aes(x='', y=ExpectedEarning), data=MALE_25_NOUNI_andloan) + geom_boxplot()
+n = ggplot(aes(x='', y=ExpectedEarning), data=data_set) + geom_boxplot()
+m = pretty_proportion_histogram(data_set$ExpectedEarning, 10000, 'ExpectedEarning', 'ExpectedEarning for all students')
+x = pretty_proportion_histogram(MALE_25_NOUNI_andloan$ExpectedEarning, 10000, 'ExpectedEarning', 'ExpectedEarning for students in my subset')
+grid.arrange(y, n, x, m)
+```
+
+It seems like the expected earnings were similar for both my subset and the whole data set. 
+
+
+
+```{r}
+#keep this here for personal use
+me = subset(MALE_25_NOUNI_andloan, CountryCitizen=='New Zealand')
+
+```
+
+
+
+Multivariates:
+
+Here is an interesting multivariate plot I've built:
+```{r}
+ nice_scatter_mv_facet <- function(df, xlab, ylab, flab) {
+  colnames(df)[1] <- "x"
+  colnames(df)[2] <- "y"
+  colnames(df)[3] <- "f"
+  
+  df_na_rm <- with(df, df[!is.na(x) & !is.na(y) & !is.na(f), ])
+  colnames(df_na_rm)[1] <- "x"
+  colnames(df_na_rm)[2] <- "y"
+  colnames(df_na_rm)[3] <- "f"
+
+ 
+  
+  # Dashed lines for median for each facet
+  plot <- ggplot(aes(x = x, y = y),
+       data = df_na_rm) +
+    geom_jitter(aes(colour = f), alpha = 0.25) +
+    #stat_density2d(aes(alpha=..level..), geom="polygon") +
+    geom_smooth(method = 'lm', colour = "#454545") +
+    theme_minimal() +
+    facet_wrap(~ f) +
+    labs(title = "", x = paste("\n", xlab), y = paste(ylab, "\n"),
+         colour = flab) +
+    scale_x_continuous(breaks = seq(10, 60, by = 10))
+  
+  return(plot)
+ }
+ 
+ 
+#Focus on genders with the highest proportions of respondents
+male_fem <- filter(data_set, Gender == "male" | Gender == "female")
+
+# Under 65 (65+ are outliers)
+male_fem_u65 <- filter(male_fem, Age < 65)
+
+# Faceted scatter plot (df, xlab, ylab, flab)
+g_age_income_gender_facet <-
+  grid.arrange(nice_scatter_mv_facet(select(male_fem_u65, Age, Income, Gender),
+                                     "Age",
+                                     "Income (thousands)",
+                                     "Gender"
+  ))
+#if I return to using R and feel I need to create a good exemplary project I can easily learn to include regression values for these lines. However I feel time is best spent getting to the web part.
+```
+
+
+
+Shout out to David Venturi(https://www.kaggle.com/venturidb) for the use of a few of his functions!
+
+
+By Finbar Maunsell
+
+
+
+
